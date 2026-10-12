@@ -8,7 +8,6 @@ This document details the **Dynamic Runtime Architecture** implemented to suppor
 
 ## 1. System Architecture
 
-## 1. System Architecture
 
 ```mermaid
 flowchart TD
