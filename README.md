@@ -8,35 +8,37 @@ This document details the **Dynamic Runtime Architecture** implemented to suppor
 
 ## 1. System Architecture
 
+## 1. System Architecture
+
 ```mermaid
 flowchart TD
-    subgraph DynamicDataSources [Dynamic Data Sources]
+    subgraph DynamicDataSources["Dynamic Data Sources"]
         direction TB
         OpenMeteo["Open-Meteo REST API (Live Weather)"]
-        IoTStream["Dynamic Telemetry Stream / Ingestion API (POST /api/telemetry/ingest)"]
-        KaggleStations["Indian EV Stations Catalog (2025 Dataset / SQLite)"]
+        IoTStream["Dynamic Telemetry Stream / Ingestion API<br/>POST /api/telemetry/ingest"]
+        KaggleStations["Indian EV Stations Catalog<br/>2025 Dataset / SQLite"]
     end
 
-    subgraph IngestionNormalization [Data Fetch & Normalization Layer]
-        FetchService["WeatherService & TelemetryService"]
-        Normalizer["FeatureNormalizer & Alias Resolution"]
-        Validator["Schema Validation (Range Clamping & Type Coercion)"]
+    subgraph IngestionNormalization["Data Fetch and Normalization Layer"]
+        FetchService["WeatherService and TelemetryService"]
+        Normalizer["FeatureNormalizer and Alias Resolution"]
+        Validator["Schema Validation<br/>Range Clamping and Type Coercion"]
     end
 
-    subgraph Storage [Persistent Storage (SQLite / PostgreSQL Ready)]
+    subgraph Storage["Persistent Storage - SQLite / PostgreSQL Ready"]
         DB_Telemetry[("telemetry_records")]
         DB_Predictions[("prediction_history")]
         DB_Status[("data_source_status")]
         DB_Bookings[("station_bookings")]
     end
 
-    subgraph MLInference [ML Inference Engine (Trained Model - Never Retrained Per Request)]
-        ModelSingleton["BatteryPredictiveModel (Loaded Once at Startup)"]
-        RangeInference["Dynamic Range & Anxiety Predictor"]
+    subgraph MLInference["ML Inference Engine"]
+        ModelSingleton["BatteryPredictiveModel<br/>Loaded Once at Startup"]
+        RangeInference["Dynamic Range and Anxiety Predictor"]
         DegradationCurve["SoH Degradation Forecast"]
     end
 
-    subgraph BackendAPI [FastAPI Backend Service]
+    subgraph BackendAPI["FastAPI Backend Service"]
         EP_Dash["GET /api/dashboard"]
         EP_Latest["GET /api/telemetry/latest"]
         EP_Refresh["POST /api/telemetry/refresh"]
@@ -44,10 +46,10 @@ flowchart TD
         EP_Bookings["POST /api/chargers/bookings"]
     end
 
-    subgraph FrontendApp [React 19 + TypeScript + Vite Dashboard]
-        UI_Dash["Dynamic Dashboard (Live Stream Indicator, Auto-Refresh 30s)"]
-        UI_Weather["Live Environmental Impact Card (Pune, IN)"]
-        UI_PredHist["Real-Time Prediction History Audit Table"]
+    subgraph FrontendApp["React 19 + TypeScript + Vite Dashboard"]
+        UI_Dash["Dynamic Dashboard<br/>Auto-Refresh Every 30 Seconds"]
+        UI_Weather["Live Environmental Impact Card"]
+        UI_PredHist["Prediction History Audit Table"]
         UI_Range["Interactive Weather-Aware Range Predictor"]
     end
 
@@ -62,15 +64,15 @@ flowchart TD
     Validator --> ModelSingleton
     ModelSingleton --> RangeInference
     ModelSingleton --> DegradationCurve
+
     RangeInference --> DB_Predictions
     DegradationCurve --> DB_Predictions
 
     Storage --> BackendAPI
     RangeInference --> BackendAPI
+    DegradationCurve --> BackendAPI
     BackendAPI --> FrontendApp
 ```
-
----
 
 ## 2. Core Concepts: Clear Distinction
 
