@@ -115,9 +115,15 @@ class TelemetryService:
         efficiency_wh_km = float(latest["power_consumption_wh_per_km"])
 
         nominal_kwh = 40.5
-        usable_kwh = round((soc / 100.0) * nominal_kwh, 2)
         current_cap_kwh = round((soh / 100.0) * nominal_kwh, 2)
-        est_range_km = round((usable_kwh * 1000.0) / max(50.0, efficiency_wh_km), 1)
+        usable_kwh = round((soc / 100.0) * nominal_kwh, 2)
+        # Core Range Rule: 100% battery = 100 km full charge baseline; 0% = 0 km
+        if soc <= 0:
+            est_range_km = 0.0
+        else:
+            base_range = (min(100.0, max(0.0, soc)) / 100.0) * 100.0
+            mode_factor = 1.05 if "eco" in str(latest.get("driving_conditions", {}).get("mode", "")).lower() else 1.00
+            est_range_km = round(min(100.0, max(0.0, base_range * mode_factor)), 1)
 
         # Baseline carbon calculations (CEA India baseline: 0.716 kg CO2/kWh vs 2.31 kg CO2/L ICE)
         co2_saved = round((latest.get("odometer_km", 18420.0) / 15.0) * 2.31 * 0.42, 1)
@@ -401,7 +407,8 @@ class TelemetryService:
         """
         Assesses range anxiety dynamically and logs to prediction_history.
         """
-        pred_range = float(req_dict.get("predicted_range_km", 284.0))
+        current_battery = float(req_dict.get("current_battery", 78.0))
+        pred_range = float(req_dict.get("predicted_range_km", (current_battery / 100.0) * 100.0))
         trip_dist = float(req_dict.get("trip_distance_km", 148.0))
         remaining = pred_range - trip_dist
         margin_percent = round((remaining / max(1.0, trip_dist)) * 100, 1)

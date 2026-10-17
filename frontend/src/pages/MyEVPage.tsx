@@ -57,7 +57,7 @@ export const MyEVPage: React.FC = () => {
     city: "Pune",
     state: "Maharashtra",
     rated_range_km: 465,
-    real_world_range_km: 284,
+    real_world_range_km: 100,
     odometer_km: 18420,
     avg_efficiency_km_per_kwh: 7.1,
     current_soc_percentage: 78,

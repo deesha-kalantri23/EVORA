@@ -83,6 +83,12 @@ const navSections: NavSection[] = [
       { label: 'Profile', path: '/profile', icon: User },
       { label: 'Settings', path: '/settings', icon: Settings }
     ]
+  },
+  {
+    title: 'OPERATIONS',
+    items: [
+      { label: 'Admin Portal', path: '/admin/dashboard', icon: ShieldCheck, badge: 'OPS' }
+    ]
   }
 ];
 

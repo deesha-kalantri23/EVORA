@@ -42,6 +42,7 @@ import {
   INITIAL_USER
 } from '../data/mockData';
 import { getUserGreeting } from '../utils/greeting';
+import { calculateEstimatedRange } from '../utils/rangeCalculator';
 
 // Energy consumption data for the weekly chart
 const WEEKLY_ENERGY_DATA = [
@@ -203,10 +204,19 @@ export const DashboardPage: React.FC = () => {
   }
 
   const soc = telemetry.soc_percentage ?? 78;
-  const usableKwh = ((soc / 100) * 40.5).toFixed(1);
-  const estRange = telemetry.estimated_range_km ?? 284;
-  const temp = liveWeather?.temperature_c ?? telemetry.battery_temperature_c ?? 32.5;
-  const weatherCond = liveWeather?.condition ?? "Sunny / Clear";
+  const temp = liveWeather?.temperature_c ?? telemetry.driving_conditions?.ambient_temp_c ?? telemetry.battery_temperature_c ?? 28;
+  const weatherCond = liveWeather?.condition;
+
+  const rangeResult = calculateEstimatedRange(soc, {
+    mode: telemetry.driving_conditions?.mode,
+    speedKmh: telemetry.driving_conditions?.avg_speed_kmh,
+    ambientTempC: temp,
+    weatherCondition: weatherCond,
+    roadType: 'mixed'
+  });
+
+  const estRange = telemetry.estimated_range_km ?? rangeResult.estimatedRangeKm;
+  const usableKwh = rangeResult.energyAvailableKwh.toFixed(1);
 
   return (
     <div className="space-y-6 pb-12">
@@ -310,14 +320,14 @@ export const DashboardPage: React.FC = () => {
                   Estimated Range
                 </span>
                 <span className="text-xs text-emerald-400 font-medium">
-                  ~7.1 km/kWh efficiency
+                  ~{rangeResult.efficiencyRateKmPerKwh.toFixed(1)} km/kWh ({rangeResult.consumptionKwhPer100Km.toFixed(1)} kWh/100 km)
                 </span>
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
                 {estRange} <span className="text-lg font-normal text-slate-400">km</span>
               </div>
               <p className="text-xs text-slate-400">
-                Weather & driving style adjusted travel estimate
+                100 km full-charge baseline • Real-world conditions ({Math.round(rangeResult.combinedEfficiencyMultiplier * 100)}% efficiency)
               </p>
             </div>
           </div>

@@ -63,10 +63,17 @@ class BatteryPredictiveModel:
         """
         Assesses range anxiety risk for a proposed trip distance.
         """
-        usable_kwh = (current_soc / 100.0) * battery_capacity_kwh
-        # Adjusted efficiency
-        effective_wh_km = efficiency_wh_per_km * traffic_factor * (1.10 if ac_on else 1.0)
-        estimated_range_km = (usable_kwh * 1000.0) / effective_wh_km
+        if current_soc <= 0:
+            estimated_range_km = 0.0
+        else:
+            baseline_range = (current_soc / 100.0) * 100.0
+            factor = 1.0
+            if ac_on:
+                factor *= 0.94
+            if traffic_factor > 1.0:
+                factor *= 0.96
+            estimated_range_km = min(100.0, max(0.0, round(baseline_range * factor, 1)))
+
         headroom_km = estimated_range_km - trip_distance_km
 
         if headroom_km < 15:
@@ -111,45 +118,58 @@ class BatteryPredictiveModel:
     ) -> Dict[str, Any]:
         """
         Weather & Style aware range inference using dynamic runtime features.
+        Core Rule: 100% battery = 100 km full charge baseline. 0% = 0 km. Capped at 100 km.
         """
-        baseline_range = (battery_level / 100.0) * 100.0
+        if battery_level <= 0:
+            return {
+                "predicted_range_km": 0.0,
+                "confidence_percentage": 94.0,
+                "energy_consumption_kwh_per_100km": 14.0,
+                "usable_kwh": 0.0,
+                "effective_factor": 1.0,
+                "data_label": "AI Model (100km Baseline Profile)"
+            }
+
+        clamped_soc = min(100.0, max(0.0, battery_level))
+        baseline_range = (clamped_soc / 100.0) * 100.0
         factor = 1.0
 
         # Driving Style
         if "eco" in driving_style.lower():
-            factor += 0.10
-        elif "aggressive" in driving_style.lower() or "sport" in driving_style.lower():
-            factor -= 0.15
+            factor += 0.05
+        elif "aggressive" in driving_style.lower() or "sport" in driving_style.lower() or "zip" in driving_style.lower():
+            factor -= 0.10
 
         # Speed
-        if average_speed_kmh > 70:
-            factor -= (average_speed_kmh - 70) * 0.003
+        if average_speed_kmh > 65:
+            penalty = min(0.15, (average_speed_kmh - 65) * 0.0025)
+            factor -= penalty
         elif average_speed_kmh < 30:
-            factor -= 0.02
+            factor -= 0.03
 
-        # Temperature / Weather HVAC impact
+        # Temperature / Weather (only apply penalties if data provided)
         if temperature_c > 35 or temperature_c < 15:
-            factor -= 0.06
-        if "monsoon" in weather.lower() or "rain" in weather.lower() or "drizzle" in weather.lower():
+            factor -= 0.04
+        if any(kw in weather.lower() for kw in ["monsoon", "rain", "drizzle", "storm"]):
             factor -= 0.04
 
         # Vehicle Load
-        if "heavy" in vehicle_load.lower() or "full" in vehicle_load.lower():
-            factor -= 0.05
-        elif "light" in vehicle_load.lower() or "1 person" in vehicle_load.lower():
-            factor += 0.03
+        if any(kw in vehicle_load.lower() for kw in ["heavy", "full"]):
+            factor -= 0.04
+        elif any(kw in vehicle_load.lower() for kw in ["light", "1 person"]):
+            factor += 0.02
 
         # Elevation
-        if "ghat" in elevation.lower() or "steep" in elevation.lower() or "hilly" in road_type.lower():
-            factor -= 0.08
+        if any(kw in elevation.lower() or kw in road_type.lower() for kw in ["ghat", "steep", "hilly"]):
+            factor -= 0.07
 
         # Traffic
-        if "heavy" in traffic.lower() or "jam" in traffic.lower():
+        if any(kw in traffic.lower() for kw in ["heavy", "jam"]):
             factor -= 0.04
 
-        predicted_range = max(5, int(round(baseline_range * factor, 0)))
+        predicted_range = min(100.0, max(0.0, round(baseline_range * factor, 1)))
         consumption_rate = round(14.0 / max(0.5, factor), 1)
-        usable_kwh = round((battery_level / 100.0) * nominal_capacity_kwh, 1)
+        usable_kwh = round((clamped_soc / 100.0) * nominal_capacity_kwh, 1)
 
         return {
             "predicted_range_km": predicted_range,
@@ -157,7 +177,7 @@ class BatteryPredictiveModel:
             "energy_consumption_kwh_per_100km": consumption_rate,
             "usable_kwh": usable_kwh,
             "effective_factor": round(factor, 3),
-            "data_label": "AI Model (Dynamic Weather & Style Inference)"
+            "data_label": "AI Model (100km Baseline Profile)"
         }
 
 def load_model() -> BatteryPredictiveModel:

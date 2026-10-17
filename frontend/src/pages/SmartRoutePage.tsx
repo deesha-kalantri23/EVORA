@@ -23,6 +23,7 @@ import { ChargingJourneyBar } from '../components/ChargingJourneyBar';
 import { INITIAL_STATIONS } from '../data/mockData';
 import { evoraApi } from '../services/api';
 import { ChargingStation } from '../types';
+import { calculateBatteryPercentForDistance, VehicleRangeConfig } from '../utils/rangeCalculator';
 
 export interface MaharashtraCityCorridor {
   id: string;
@@ -540,68 +541,90 @@ export const SmartRoutePage: React.FC = () => {
   const routeOptions: RouteOption[] = useMemo(() => {
     const dist = matchedCorridor.distanceKm;
     const baseMinutes = matchedCorridor.baseTravelMinutes;
+    const isGhat = matchedCorridor.elevationProfile.toLowerCase().includes('ghat');
 
-    // Vehicle Battery Capacity
+    // Vehicle Battery Capacity & Config
     const capacityKwh = vehicle.includes('50.3') ? 50.3 : vehicle.includes('39.4') ? 39.4 : 40.5;
+    const vehicleConfig: VehicleRangeConfig = {
+      fullChargeRangeKm: 100.0,
+      nominalBatteryCapacityKwh: capacityKwh
+    };
 
-    // Style multipliers
-    let styleSpeedMultiplier = 1.0;
-    let styleEnergyMultiplier = 1.0;
-    if (drivingStyle === 'Fast Highway') {
-      styleSpeedMultiplier = 0.9;
-      styleEnergyMultiplier = 1.18;
-    } else if (drivingStyle === 'Eco / Gentle') {
-      styleSpeedMultiplier = 1.15;
-      styleEnergyMultiplier = 0.88;
-    }
+    // 1. Fastest Route (Sport/Highway throttle, 95 km/h)
+    const fastestCalc = calculateBatteryPercentForDistance(
+      dist,
+      {
+        mode: 'Sport',
+        speedKmh: 95,
+        roadType: 'highway',
+        elevation: isGhat ? 'Steep Ghats' : 'Flat Terrain'
+      },
+      vehicleConfig
+    );
+    const fastestKwh = fastestCalc.energyKwhNeeded;
+    const fastestPercent = fastestCalc.batteryPercentNeeded;
+    const fastestStops = fastestCalc.estimatedStopsNeeded(currentBattery, minReserve);
 
-    // Baseline: ~142 Wh/km
-    const baseKwhPerKm = 0.142;
-
-    // 1. Fastest Route
-    const fastestKwh = Math.round(dist * baseKwhPerKm * styleEnergyMultiplier * 10) / 10;
-    const fastestPercent = Math.min(100, Math.round((fastestKwh / capacityKwh) * 100));
-    const fastestMinutes = Math.round(baseMinutes * styleSpeedMultiplier);
+    const fastestMinutes = Math.round(baseMinutes * 0.95 + fastestStops * matchedCorridor.recommendedStop.durationMins);
     const fastestHours = Math.floor(fastestMinutes / 60);
     const fastestMinsRem = fastestMinutes % 60;
     const fastestTimeStr = `${fastestHours}h ${fastestMinsRem < 10 ? '0' : ''}${fastestMinsRem}m`;
 
-    const fastestNet = currentBattery - fastestPercent;
-    const fastestStops = fastestNet < minReserve ? Math.max(1, Math.ceil((minReserve - fastestNet) / 45)) : 0;
     const fastestArrival =
       fastestStops > 0
-        ? Math.min(85, Math.max(18, fastestNet + fastestStops * 45))
-        : Math.max(5, fastestNet);
+        ? Math.min(85, Math.max(minReserve, 80 - Math.round(dist / (fastestStops + 1))))
+        : Math.max(0, currentBattery - fastestPercent);
 
-    // 2. Energy Efficient (Eco Mode)
-    const ecoKwh = Math.round(dist * baseKwhPerKm * 0.86 * 10) / 10;
-    const ecoPercent = Math.min(100, Math.round((ecoKwh / capacityKwh) * 100));
-    const ecoMinutes = Math.round(baseMinutes * 1.18);
+    // 2. Energy Efficient (Eco Mode, 75 km/h)
+    const ecoDist = Math.round(dist * 1.02);
+    const ecoCalc = calculateBatteryPercentForDistance(
+      ecoDist,
+      {
+        mode: 'Eco',
+        speedKmh: 75,
+        roadType: 'highway',
+        elevation: isGhat ? 'Steep Ghats' : 'Flat Terrain'
+      },
+      vehicleConfig
+    );
+    const ecoKwh = ecoCalc.energyKwhNeeded;
+    const ecoPercent = ecoCalc.batteryPercentNeeded;
+    const ecoStops = ecoCalc.estimatedStopsNeeded(currentBattery, minReserve);
+
+    const ecoMinutes = Math.round(baseMinutes * 1.12 + ecoStops * (matchedCorridor.recommendedStop.durationMins - 5));
     const ecoHours = Math.floor(ecoMinutes / 60);
     const ecoMinsRem = ecoMinutes % 60;
     const ecoTimeStr = `${ecoHours}h ${ecoMinsRem < 10 ? '0' : ''}${ecoMinsRem}m`;
 
-    const ecoNet = currentBattery - ecoPercent;
-    const ecoStops = ecoNet < minReserve ? Math.max(1, Math.ceil((minReserve - ecoNet) / 45)) : 0;
     const ecoArrival =
       ecoStops > 0
-        ? Math.min(88, Math.max(22, ecoNet + ecoStops * 45))
-        : Math.max(10, ecoNet);
+        ? Math.min(88, Math.max(minReserve + 4, 82 - Math.round(ecoDist / (ecoStops + 1))))
+        : Math.max(0, currentBattery - ecoPercent);
 
-    // 3. Fewer Stops (Deep direct transit)
-    const fewerKwh = Math.round(dist * baseKwhPerKm * 0.94 * 10) / 10;
-    const fewerPercent = Math.min(100, Math.round((fewerKwh / capacityKwh) * 100));
-    const fewerMinutes = Math.round(baseMinutes * 1.05);
+    // 3. Fewer Stops (Normal balanced cruising, 85 km/h)
+    const fewerCalc = calculateBatteryPercentForDistance(
+      dist,
+      {
+        mode: 'Normal',
+        speedKmh: 85,
+        roadType: 'highway',
+        elevation: isGhat ? 'Steep Ghats' : 'Flat Terrain'
+      },
+      vehicleConfig
+    );
+    const fewerKwh = fewerCalc.energyKwhNeeded;
+    const fewerPercent = fewerCalc.batteryPercentNeeded;
+    const fewerStops = fewerCalc.estimatedStopsNeeded(currentBattery, minReserve);
+
+    const fewerMinutes = Math.round(baseMinutes * 1.05 + fewerStops * matchedCorridor.recommendedStop.durationMins);
     const fewerHours = Math.floor(fewerMinutes / 60);
     const fewerMinsRem = fewerMinutes % 60;
     const fewerTimeStr = `${fewerHours}h ${fewerMinsRem < 10 ? '0' : ''}${fewerMinsRem}m`;
 
-    const fewerNet = currentBattery - fewerPercent;
-    const fewerStops = dist <= 160 && currentBattery >= 75 ? 0 : Math.max(0, fastestStops - 1);
     const fewerArrival =
       fewerStops > 0
-        ? Math.min(75, Math.max(15, fewerNet + fewerStops * 50))
-        : Math.max(5, fewerNet);
+        ? Math.min(80, Math.max(minReserve, 80 - Math.round(dist / (fewerStops + 1))))
+        : Math.max(0, currentBattery - fewerPercent);
 
     return [
       {
@@ -613,21 +636,34 @@ export const SmartRoutePage: React.FC = () => {
         batteryConsumptionKwh: fastestKwh,
         batteryConsumptionPercent: fastestPercent,
         chargingStops: fastestStops,
-        stopName: fastestStops > 0 ? matchedCorridor.recommendedStop.name : 'Direct Transit (No intermediate stop needed)',
-        stopDuration: fastestStops > 0 ? `${matchedCorridor.recommendedStop.durationMins} mins top-up` : '0 mins',
+        stopName:
+          fastestStops > 0
+            ? (fastestStops === 1
+                ? matchedCorridor.recommendedStop.name
+                : `${fastestStops} Stops: ${matchedCorridor.recommendedStop.name} & corridor hubs`)
+            : 'Direct Transit (No intermediate stop needed)',
+        stopDuration: fastestStops > 0 ? `${matchedCorridor.recommendedStop.durationMins * fastestStops} mins top-up` : '0 mins',
         arrivalBatteryPercent: fastestArrival
       },
       {
         id: 'efficient',
         name: 'Energy Efficient',
         tag: 'Max Eco Mode',
-        distanceKm: Math.round(dist * 1.02),
+        distanceKm: ecoDist,
         travelTime: ecoTimeStr,
         batteryConsumptionKwh: ecoKwh,
         batteryConsumptionPercent: ecoPercent,
         chargingStops: ecoStops,
-        stopName: ecoStops > 0 ? matchedCorridor.recommendedStop.name : 'Direct Transit (Eco cruising preserves battery)',
-        stopDuration: ecoStops > 0 ? `${Math.max(10, matchedCorridor.recommendedStop.durationMins - 5)} mins top-up` : '0 mins',
+        stopName:
+          ecoStops > 0
+            ? (ecoStops === 1
+                ? matchedCorridor.recommendedStop.name
+                : `${ecoStops} Stops: Eco staging at ${matchedCorridor.recommendedStop.name}`)
+            : 'Direct Transit (Eco cruising preserves battery)',
+        stopDuration:
+          ecoStops > 0
+            ? `${Math.max(10, matchedCorridor.recommendedStop.durationMins - 5) * ecoStops} mins top-up`
+            : '0 mins',
         arrivalBatteryPercent: ecoArrival
       },
       {
@@ -639,8 +675,13 @@ export const SmartRoutePage: React.FC = () => {
         batteryConsumptionKwh: fewerKwh,
         batteryConsumptionPercent: fewerPercent,
         chargingStops: fewerStops,
-        stopName: fewerStops > 0 ? matchedCorridor.recommendedStop.name : 'No intermediate stops required',
-        stopDuration: fewerStops > 0 ? `${matchedCorridor.recommendedStop.durationMins} mins top-up` : '0 mins',
+        stopName:
+          fewerStops > 0
+            ? (fewerStops === 1
+                ? matchedCorridor.recommendedStop.name
+                : `${fewerStops} Stops: Long-haul charging`)
+            : 'No intermediate stops required',
+        stopDuration: fewerStops > 0 ? `${matchedCorridor.recommendedStop.durationMins * fewerStops} mins top-up` : '0 mins',
         arrivalBatteryPercent: fewerArrival
       }
     ];

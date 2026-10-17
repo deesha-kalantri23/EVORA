@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '../components/Badge';
 import { evoraApi } from '../services/api';
+import { calculateEstimatedRange } from '../utils/rangeCalculator';
 
 export const RangeAnxietyPage: React.FC = () => {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ export const RangeAnxietyPage: React.FC = () => {
   // Inputs
   const [currentBattery, setCurrentBattery] = useState(78);
   const [tripDistance, setTripDistance] = useState(148); // Pune to Mumbai default
-  const [predictedRange, setPredictedRange] = useState(284);
+  const [predictedRange, setPredictedRange] = useState(78);
   const [weather, setWeather] = useState('Sunny / Clear (32°C)');
   const [traffic, setTraffic] = useState('Moderate');
   const [drivingStyle, setDrivingStyle] = useState('Normal / Balanced');
@@ -31,12 +32,23 @@ export const RangeAnxietyPage: React.FC = () => {
 
   // Calculation Results
   const [loading, setLoading] = useState(false);
-  const [riskScore, setRiskScore] = useState(62);
-  const [riskLevel, setRiskLevel] = useState<'Low' | 'Medium' | 'High'>('Medium');
-  const [tripFeasibility, setTripFeasibility] = useState('Feasible (Caution advised on highway & ghats)');
-  const [remainingRange, setRemainingRange] = useState(136);
-  const [safetyMargin, setSafetyMargin] = useState(91.8);
+  const [riskScore, setRiskScore] = useState(75);
+  const [riskLevel, setRiskLevel] = useState<'Low' | 'Medium' | 'High'>('High');
+  const [tripFeasibility, setTripFeasibility] = useState('Charging Required (148 km exceeds ~78 km single-charge range)');
+  const [remainingRange, setRemainingRange] = useState(-70);
+  const [safetyMargin, setSafetyMargin] = useState(-47.3);
   const [chargingRecommended, setChargingRecommended] = useState(true);
+
+  // Sync predictedRange whenever currentBattery or conditions change
+  React.useEffect(() => {
+    const mode = drivingStyle.includes('Eco') ? 'Eco' : drivingStyle.includes('Fast') || drivingStyle.includes('Sport') ? 'Sport' : 'Normal';
+    const dynamicResult = calculateEstimatedRange(currentBattery, {
+      mode,
+      weatherCondition: weather,
+      vehicleLoad
+    });
+    setPredictedRange(dynamicResult.estimatedRangeKm);
+  }, [currentBattery, drivingStyle, weather, vehicleLoad]);
 
   React.useEffect(() => {
     evoraApi.getTelemetry().then(tel => {
@@ -174,8 +186,8 @@ export const RangeAnxietyPage: React.FC = () => {
               </div>
               <input
                 type="range"
-                min="50"
-                max="400"
+                min="0"
+                max="100"
                 value={predictedRange}
                 onChange={(e) => setPredictedRange(parseInt(e.target.value))}
                 className="w-full accent-blue-500 cursor-pointer"

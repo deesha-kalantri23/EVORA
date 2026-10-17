@@ -33,7 +33,7 @@ class RangePredictionRequest(BaseModel):
 class RangeAnxietyRequest(BaseModel):
     current_battery: float = Field(78.0, ge=0.0, le=100.0)
     trip_distance_km: float = Field(148.0, gt=0.0)
-    predicted_range_km: float = Field(284.0, ge=0.0)
+    predicted_range_km: float = Field(78.0, ge=0.0)
     weather: Optional[str] = "Sunny / Clear (32°C)"
     traffic: Optional[str] = "Moderate"
     driving_style: Optional[str] = "Normal / Balanced"

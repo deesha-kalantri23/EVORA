@@ -16,7 +16,7 @@ MY_VEHICLES: List[Dict[str, Any]] = [
         "current_soc_percentage": 78.0,
         "battery_health_percentage": 94.0,
         "rated_range_km": 465,
-        "real_world_range_km": 284,
+        "real_world_range_km": 100,
         "avg_efficiency_km_per_kwh": 7.1,
         "charging_type": "AC + DC",
         "connector_supported": ["CCS2", "Type 2 AC"],

@@ -8,12 +8,14 @@ import {
   Menu,
   Database,
   Sun,
-  Moon
+  Moon,
+  ShieldCheck
 } from 'lucide-react';
 import { INITIAL_USER, INITIAL_TELEMETRY } from '../data/mockData';
 import { formatINR } from '../utils/cn';
 import { useTheme } from '../context/ThemeContext';
 import { useWallet } from '../hooks/useWallet';
+import { calculateEstimatedRange } from '../utils/rangeCalculator';
 
 interface HeaderProps {
   onMobileMenuClick: () => void;
@@ -24,6 +26,12 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick, pageTitle }) 
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const { balance } = useWallet();
+
+  const headerRange = calculateEstimatedRange(INITIAL_TELEMETRY.soc_percentage, {
+    mode: 'Eco',
+    ambientTempC: INITIAL_TELEMETRY.driving_conditions?.ambient_temp_c,
+    speedKmh: INITIAL_TELEMETRY.driving_conditions?.avg_speed_kmh,
+  }).estimatedRangeKm;
 
   return (
     <header className="h-16 bg-[#0F172A]/90 backdrop-blur-md border-b border-[#1E293B] sticky top-0 z-20 flex items-center justify-between px-4 lg:px-6">
@@ -68,7 +76,7 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick, pageTitle }) 
           </div>
           <div className="text-left leading-tight">
             <div className="text-xs font-bold text-white">{INITIAL_TELEMETRY.soc_percentage}%</div>
-            <div className="text-[10px] text-slate-400 font-medium">{INITIAL_TELEMETRY.estimated_range_km} km</div>
+            <div className="text-[10px] text-slate-400 font-medium">{headerRange} km</div>
           </div>
         </div>
 
@@ -105,6 +113,16 @@ export const Header: React.FC<HeaderProps> = ({ onMobileMenuClick, pageTitle }) 
           ) : (
             <Moon className="w-4 h-4 text-indigo-400" />
           )}
+        </button>
+
+        {/* Admin Portal Quick Link */}
+        <button
+          onClick={() => navigate('/admin/dashboard')}
+          className="hidden sm:flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-colors"
+          title="Open Central Admin Portal"
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Admin</span>
         </button>
 
         {/* User Avatar */}

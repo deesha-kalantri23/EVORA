@@ -1,5 +1,6 @@
 import { ChargingStation, TelemetryData, Vehicle, Booking } from '../types';
 import { INITIAL_STATIONS, INITIAL_TELEMETRY, INITIAL_VEHICLES, INITIAL_BOOKINGS } from '../data/mockData';
+import { calculateEstimatedRange } from '../utils/rangeCalculator';
 
 const BASE_URL = 'http://localhost:8000/api';
 
@@ -152,21 +153,22 @@ export const evoraApi = {
       // Fallback
     }
 
-    // Baseline: 100% SoC = 100 km average
-    let factor = 1.0;
-    if (payload.driving_style.toLowerCase().includes('eco')) factor += 0.10;
-    if (payload.driving_style.toLowerCase().includes('aggressive') || payload.driving_style.toLowerCase().includes('sport')) factor -= 0.15;
-    if (payload.temperature_c > 35 || payload.temperature_c < 15) factor -= 0.06;
-    if (payload.average_speed_kmh > 70) factor -= 0.05;
-
-    const baseRange = (payload.battery_level / 100) * 100;
-    const estRange = Math.max(5, Math.round(baseRange * factor));
-    const usable = (payload.battery_level / 100) * 40.5;
+    const est = calculateEstimatedRange(payload.battery_level, {
+      drivingMode: payload.driving_style,
+      temperatureC: payload.temperature_c,
+      weather: payload.weather,
+      speedKmh: payload.average_speed_kmh,
+      vehicleLoad: payload.vehicle_load,
+      traffic: payload.traffic,
+      terrain: payload.elevation
+    });
+    const clampedSoc = Math.min(100, Math.max(0, payload.battery_level));
+    const usable = (clampedSoc / 100) * 40.5;
 
     return {
-      predicted_range_km: estRange,
+      predicted_range_km: est.estimatedRangeKm,
       confidence_percentage: 94,
-      energy_consumption_kwh_per_100km: +( (14.0 / factor).toFixed(1) ),
+      energy_consumption_kwh_per_100km: +( (14.0 / est.combinedMultiplier).toFixed(1) ),
       usable_kwh: +(usable.toFixed(1)),
       data_label: 'EVIoT Trained Model (100km / 100% SoC Benchmark)'
     };

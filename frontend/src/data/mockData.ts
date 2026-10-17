@@ -18,7 +18,7 @@ export const INITIAL_VEHICLES: Vehicle[] = [
     year: 2025,
     battery_capacity_kwh: 40.5,
     rated_range_km: 465,
-    real_world_range_km: 284,
+    real_world_range_km: 100,
     connector_supported: ["CCS2", "Type 2 AC"],
     max_ac_charging_kw: 7.2,
     max_dc_charging_kw: 50.0,
@@ -66,7 +66,7 @@ export const INITIAL_TELEMETRY: TelemetryData = {
   charge_cycles: 421,
   power_consumption_wh_per_km: 140.8, // 7.1 km/kWh
   odometer_km: 18420.0,
-  estimated_range_km: 284,
+  estimated_range_km: 81.9,
   nominal_capacity_kwh: 40.5,
   current_capacity_kwh: 38.07,
   pack_health_status: "Healthy (Optimal)",

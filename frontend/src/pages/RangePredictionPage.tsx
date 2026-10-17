@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Compass,
   Zap,
@@ -32,6 +32,7 @@ import {
 } from 'recharts';
 import { Badge } from '../components/Badge';
 import { evoraApi } from '../services/api';
+import { calculateEstimatedRange } from '../utils/rangeCalculator';
 
 // 1. Chart: Range vs Battery Level (100% Battery = 100 km Baseline)
 const RANGE_VS_BATTERY_DATA = [
@@ -103,6 +104,57 @@ export const RangePredictionPage: React.FC = () => {
     syncWeatherFromBackend();
   }, []);
 
+  // Dynamic calculation when any input changes
+  const dynamicResult = useMemo(() => {
+    const mode = drivingStyle.includes('Eco') ? 'Eco' : drivingStyle.includes('Sport') ? 'Sport' : 'Normal';
+    const isHvacOn = temperature > 28 || temperature < 15;
+    return calculateEstimatedRange(batteryLevel, {
+      mode,
+      speedKmh: averageSpeed,
+      ambientTempC: temperature,
+      weatherCondition: weather,
+      hvacOn: isHvacOn,
+      vehicleLoad,
+      roadType,
+      traffic,
+      elevation
+    });
+  }, [batteryLevel, drivingStyle, averageSpeed, temperature, weather, vehicleLoad, roadType, traffic, elevation]);
+
+  useEffect(() => {
+    setPredictedRange(dynamicResult.estimatedRangeKm);
+    setEnergyConsumption(Number(dynamicResult.consumptionKwhPer100Km.toFixed(1)));
+  }, [dynamicResult]);
+
+  // Dynamic Chart 2 data according to current battery level
+  const rangeByStyleData = useMemo(() => {
+    const isHvacOn = temperature > 28 || temperature < 15;
+    const ecoR = calculateEstimatedRange(batteryLevel, {
+      mode: 'Eco',
+      speedKmh: 45,
+      ambientTempC: temperature,
+      hvacOn: isHvacOn
+    }).estimatedRangeKm;
+    const normR = calculateEstimatedRange(batteryLevel, {
+      mode: 'Normal',
+      speedKmh: 45,
+      ambientTempC: temperature,
+      hvacOn: isHvacOn
+    }).estimatedRangeKm;
+    const sportR = calculateEstimatedRange(batteryLevel, {
+      mode: 'Sport',
+      speedKmh: 45,
+      ambientTempC: temperature,
+      hvacOn: isHvacOn
+    }).estimatedRangeKm;
+
+    return [
+      { drivingMode: 'Eco Mode', rangeKm: ecoR, consumption: 13.3 },
+      { drivingMode: 'Normal Mode', rangeKm: normR, consumption: 14.0 },
+      { drivingMode: 'Zip / Sport', rangeKm: sportR, consumption: 15.6 }
+    ];
+  }, [batteryLevel, temperature]);
+
   const handlePredict = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -121,14 +173,14 @@ export const RangePredictionPage: React.FC = () => {
       });
 
       if (result) {
-        setPredictedRange(result.predicted_range_km ?? Math.round(batteryLevel));
+        setPredictedRange(result.predicted_range_km ?? dynamicResult.estimatedRangeKm);
         setConfidence(result.confidence_percentage ?? 94);
-        setEnergyConsumption(result.energy_consumption_kwh_per_100km ?? 14.0);
+        setEnergyConsumption(result.energy_consumption_kwh_per_100km ?? Number(dynamicResult.consumptionKwhPer100Km.toFixed(1)));
       }
     } catch (err) {
       console.error('Error predicting range:', err);
     } finally {
-      setTimeout(() => setLoading(false), 400);
+      setTimeout(() => setLoading(false), 300);
     }
   };
 
@@ -420,7 +472,7 @@ export const RangePredictionPage: React.FC = () => {
 
                 <div className="h-44 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={RANGE_BY_STYLE_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <BarChart data={rangeByStyleData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
                       <XAxis dataKey="drivingMode" stroke="#64748B" fontSize={9} />
                       <YAxis stroke="#64748B" fontSize={11} tickFormatter={(v) => `${v} km`} />

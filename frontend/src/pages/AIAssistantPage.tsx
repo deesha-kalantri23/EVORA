@@ -23,7 +23,7 @@ const INITIAL_CONVERSATION: AIMessage[] = [
   {
     id: 'm-welcome',
     sender: 'assistant',
-    text: "Namaste! I am EVORA Copilot. Your Tata Nexon EV is at 78% SoC (284 km range) and 96.2% SoH. Ask me anything about range, charging, or battery diagnostics.",
+    text: "Namaste! I am EVORA Copilot. Your Tata Nexon EV is at 78% SoC (78 km baseline range) and 96.2% SoH. Ask me anything about range, charging, or battery diagnostics.",
     time: '20:10',
     dataLabel: 'Vehicle Copilot',
     action: {
