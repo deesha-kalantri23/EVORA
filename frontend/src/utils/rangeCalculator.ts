@@ -364,3 +364,112 @@ export function calculateBatteryPercentForDistance(
     }
   };
 }
+
+export interface RangeAnxietyResult {
+  riskScore: number;
+  riskLevel: 'Low' | 'Medium' | 'High';
+  riskColor: string;
+  tripFeasibility: string;
+  remainingRangeKm: number;
+  safetyMarginPercent: number;
+  chargingRecommended: boolean;
+  recommendedStationHint: string;
+  summaryText: string;
+}
+
+/**
+ * Dynamic Range Anxiety Risk Calculation
+ *
+ * Evaluates the risk of covering a proposed trip distance with the available charging level.
+ * Charging is capped at 100% and trip distance is capped at 200 km.
+ *
+ * Motive: Quantifies the real-time operational risk of attempting to
+ * cover a proposed journey distance with the current charge level.
+ *
+ * Continuous 0-100 scale:
+ * - 0 = Safe, zero risk (0 km trip distance or abundant range headroom)
+ * - 100 = Critical risk (0% charging or severe distance deficit)
+ */
+export function calculateDynamicRangeAnxiety(
+  chargingPercentage: number | null | undefined,
+  tripDistanceKm: number | null | undefined,
+  predictedRangeKm?: number | null,
+  conditions?: DrivingConditions,
+  config: VehicleRangeConfig = DEFAULT_VEHICLE_RANGE_CONFIG
+): RangeAnxietyResult {
+  // Clamp charging max at 100 (range 0 to 100)
+  const charging = Math.min(100, Math.max(0, Number(chargingPercentage) || 0));
+  // Clamp trip distance max at 200 km (range 0 to 200)
+  const distance = Math.min(200, Math.max(0, Number(tripDistanceKm) || 0));
+
+  // Determine effective range for this charging level
+  let effectiveRange: number;
+  if (typeof predictedRangeKm === 'number' && !isNaN(predictedRangeKm) && predictedRangeKm >= 0) {
+    effectiveRange = Math.min(config.fullChargeRangeKm, Math.max(0, predictedRangeKm));
+  } else {
+    effectiveRange = calculateEstimatedRange(charging, conditions, config).estimatedRangeKm;
+  }
+
+  const remaining = Math.round((effectiveRange - distance) * 10) / 10;
+  const marginPercent = distance <= 0
+    ? 100
+    : Math.round(((remaining / distance) * 100) * 10) / 10;
+
+  let riskScore: number;
+  if (distance <= 0) {
+    riskScore = 0;
+  } else if (charging <= 0 || effectiveRange <= 0) {
+    riskScore = 100;
+  } else {
+    const ratio = distance / Math.max(0.1, effectiveRange);
+    if (ratio <= 1.0) {
+      // Smooth upward progression from 0 to 80 as distance reaches effective range
+      riskScore = 80.0 * Math.pow(ratio, 1.3);
+    } else {
+      // Recharging needed: smooth progression from 80 to 100 as deficit widens
+      riskScore = 80.0 + 20.0 * (1.0 - Math.exp(-2.2 * (ratio - 1.0)));
+    }
+    riskScore = Math.min(100, Math.max(0, Math.round(riskScore)));
+  }
+
+  let riskLevel: 'Low' | 'Medium' | 'High';
+  let riskColor: string;
+  let tripFeasibility: string;
+  let summaryText: string;
+
+  if (riskScore < 40) {
+    riskLevel = 'Low';
+    riskColor = '#10B981';
+    tripFeasibility = 'Easily Feasible (Direct transit with safe buffer)';
+    summaryText = `Safe buffer of ${remaining > 0 ? remaining : 0} km to destination. Direct transit comfortable.`;
+  } else if (riskScore < 75) {
+    riskLevel = 'Medium';
+    riskColor = '#F59E0B';
+    tripFeasibility = 'Feasible with Caution (Moderate buffer upon arrival)';
+    summaryText = `Moderate buffer of ${remaining > 0 ? remaining : 0} km. Eco driving advised.`;
+  } else {
+    riskLevel = 'High';
+    riskColor = '#EF4444';
+    if (remaining < 0) {
+      tripFeasibility = `Charging Required (${distance} km exceeds ~${Math.round(effectiveRange)} km single-charge range)`;
+      summaryText = `Distance exceeds single-charge range by ${Math.abs(remaining)} km. Fast-charging stop required.`;
+    } else {
+      tripFeasibility = 'Borderline Feasible (Critical < 10 km reserve margin)';
+      summaryText = `Critical reserve margin of ${remaining} km upon arrival. Pre-charging strongly recommended.`;
+    }
+  }
+
+  const chargingRecommended = riskScore >= 60 || remaining <= 15;
+
+  return {
+    riskScore,
+    riskLevel,
+    riskColor,
+    tripFeasibility,
+    remainingRangeKm: remaining,
+    safetyMarginPercent: marginPercent,
+    chargingRecommended,
+    recommendedStationHint: 'Zeon Charging - Urse Food Mall (150 kW DC Fast)',
+    summaryText
+  };
+}

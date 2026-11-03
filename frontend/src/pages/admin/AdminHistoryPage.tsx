@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { History, Search, Download, CheckCircle2, Zap, Calendar, IndianRupee } from 'lucide-react';
+import { History, Search, Download, CheckCircle2, Zap, Calendar, IndianRupee, Bike, Car } from 'lucide-react';
 import { adminDataService } from '../../services/adminDataService';
 import { AdminBooking } from '../../types/admin';
 import { formatINR } from '../../utils/cn';
@@ -83,15 +83,41 @@ export const AdminHistoryPage: React.FC = () => {
                   <tr key={h.id} className="hover:bg-slate-800/30 transition-colors">
                     <td className="py-3.5 px-4 font-mono font-bold text-emerald-400">{h.id}</td>
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-white">{h.member_name}</div>
-                      <div className="font-mono text-[10px] text-slate-400">{h.vehicle_registration_number}</div>
+                      {(() => {
+                        const is2W = (h.vehicle_model || '').toLowerCase().includes('scooty') ||
+                          (h.vehicle_model || '').toLowerCase().includes('2w') ||
+                          (h.connector_type || '').toLowerCase().includes('ather') ||
+                          (h.connector_type || '').toLowerCase().includes('lev');
+                        return (
+                          <>
+                            <div className="font-semibold text-white flex items-center gap-2">
+                              <span>{h.member_name}</span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 ${
+                                  is2W
+                                    ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                                    : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                                }`}
+                              >
+                                {is2W ? <Bike className="w-2.5 h-2.5" /> : <Car className="w-2.5 h-2.5" />}
+                                <span>{is2W ? '2W Scooty' : '4W Car'}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">
+                              <span className="font-mono text-emerald-400">{h.vehicle_registration_number}</span>
+                              <span>•</span>
+                              <span className="truncate max-w-[120px]">{h.vehicle_model}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="text-slate-200 truncate max-w-[180px]">{h.station_name}</div>
                       <div className="text-[10px] text-slate-500">{h.station_city}</div>
                     </td>
                     <td className="py-3.5 px-4 font-bold text-cyan-400">
-                      {h.energy_consumed_kwh ? `${h.energy_consumed_kwh} kWh` : '21.4 kWh'}
+                      {h.energy_consumed_kwh ? `${h.energy_consumed_kwh} kWh` : ((h.vehicle_model || '').includes('Scooty') ? '3.2 kWh' : '21.4 kWh')}
                     </td>
                     <td className="py-3.5 px-4 text-slate-300">
                       {h.estimated_duration_min} minutes

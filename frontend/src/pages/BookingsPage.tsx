@@ -57,8 +57,21 @@ const INITIAL_BOOKINGS_LIST: BookingItem[] = [
     city: 'Pune',
     date: 'Today, 30 Sep 2026',
     timeSlot: '18:30 - 19:15',
-    connector: 'CCS2 (60 kW Fast DC)',
+    connector: 'CCS2 (60 kW Fast DC) [4W Car]',
     estimatedCostInr: 420.0,
+    durationMin: 45,
+    status: 'Upcoming'
+  },
+  {
+    bookingId: 'BK-2026-9101',
+    stationId: 'pune-ather-05',
+    stationName: 'Ather Grid Fast Charger - FC Road',
+    address: 'Fergusson College Rd, Shivajinagar, Pune',
+    city: 'Pune',
+    date: 'Today, 30 Sep 2026',
+    timeSlot: '19:30 - 20:15',
+    connector: 'Ather Proprietary Fast DC [2W Scooty]',
+    estimatedCostInr: 48.0,
     durationMin: 45,
     status: 'Upcoming'
   },
@@ -71,9 +84,23 @@ const INITIAL_BOOKINGS_LIST: BookingItem[] = [
     city: 'Pune / Highway',
     date: '26 Sep 2026',
     timeSlot: '14:00 - 14:30',
-    connector: 'CCS2 (150 kW Ultra-Fast)',
-    estimatedCostInr: 580.0,
+    connector: 'CCS2 (150 kW Ultra-Fast) [4W Car]',
+    estimatedCostInr: 440.0,
     durationMin: 30,
+    status: 'Completed'
+  } as any,
+  {
+    id: 'b-completed-scooty-1',
+    bookingId: 'BK-2026-9102',
+    stationId: 'pune-ather-05',
+    stationName: 'Ather Grid Fast Charger - FC Road',
+    address: 'Fergusson College Rd, Shivajinagar, Pune',
+    city: 'Pune',
+    date: '24 Sep 2026',
+    timeSlot: '12:15 - 13:00',
+    connector: 'Type 2 AC (3.3 kW) [2W Scooty]',
+    estimatedCostInr: 52.0,
+    durationMin: 45,
     status: 'Completed'
   } as any,
   {
@@ -85,9 +112,23 @@ const INITIAL_BOOKINGS_LIST: BookingItem[] = [
     city: 'Pune',
     date: '20 Sep 2026',
     timeSlot: '17:30 - 18:15',
-    connector: 'CCS2 (120 kW Fast DC)',
+    connector: 'CCS2 (120 kW Fast DC) [4W Car]',
     estimatedCostInr: 390.0,
     durationMin: 45,
+    status: 'Completed'
+  } as any,
+  {
+    id: 'b-completed-scooty-2',
+    bookingId: 'BK-2026-9103',
+    stationId: 'pune-chargezone-06',
+    stationName: 'ChargeZone - Koregaon Park Plaza',
+    address: 'North Main Road, Koregaon Park, Pune',
+    city: 'Pune',
+    date: '18 Sep 2026',
+    timeSlot: '16:00 - 16:30',
+    connector: '3.3 kW LEV Socket [2W Scooty]',
+    estimatedCostInr: 34.0,
+    durationMin: 30,
     status: 'Completed'
   } as any,
   {
@@ -99,9 +140,23 @@ const INITIAL_BOOKINGS_LIST: BookingItem[] = [
     city: 'Pune',
     date: '15 Sep 2026',
     timeSlot: '11:00 - 11:45',
-    connector: 'CCS2 (50 kW)',
+    connector: 'CCS2 (50 kW) [4W Car]',
     estimatedCostInr: 350.0,
     durationMin: 45,
+    status: 'Cancelled'
+  } as any,
+  {
+    id: 'b-cancelled-scooty-1',
+    bookingId: 'BK-2026-9108',
+    stationId: 'pune-ather-05',
+    stationName: 'Ather Grid Fast Charger - FC Road',
+    address: 'Fergusson College Rd, Shivajinagar, Pune',
+    city: 'Pune',
+    date: '12 Sep 2026',
+    timeSlot: '09:00 - 09:30',
+    connector: 'Ather Proprietary [2W Scooty]',
+    estimatedCostInr: 42.0,
+    durationMin: 30,
     status: 'Cancelled'
   } as any
 ];
@@ -242,12 +297,27 @@ export const BookingsPage: React.FC = () => {
     }));
   };
 
-  // Computed values based on duration and station
-  const calculatedEstimatedCost = Math.round(
+  // Computed values based on duration, station, and vehicle category
+  const isSelectedConnector2W =
+    selectedConnector.toLowerCase().includes('ather') ||
+    selectedConnector.toLowerCase().includes('lev') ||
+    selectedConnector.toLowerCase().includes('socket') ||
+    selectedConnector.toLowerCase().includes('scooty') ||
+    selectedConnector.toLowerCase().includes('type 6') ||
+    selectedConnector.toLowerCase().includes('16a');
+
+  const rawCost = Math.round(
     durationHours === 0 
-      ? 90 
-      : 90 + durationHours * (selectedStation.power_kw >= 100 ? 110 : (selectedStation.power_kw >= 50 ? 75 : 45))
+      ? (isSelectedConnector2W ? 30 : 90)
+      : (isSelectedConnector2W
+          ? 30 + durationHours * 18
+          : 90 + durationHours * (selectedStation.power_kw >= 100 ? 110 : (selectedStation.power_kw >= 50 ? 75 : 45)))
   );
+
+  // Strictly enforce user rules: Max ₹70 for scooty full charge, Max ₹450 for car full charge
+  const calculatedEstimatedCost = isSelectedConnector2W
+    ? Math.min(70, Math.max(25, rawCost))
+    : Math.min(450, Math.max(120, rawCost));
 
   // Start new booking flow
   const handleOpenBookingFlow = () => {

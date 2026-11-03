@@ -61,8 +61,12 @@ class BatteryPredictiveModel:
         traffic_factor: float = 1.15
     ) -> Dict[str, Any]:
         """
-        Assesses range anxiety risk for a proposed trip distance.
+        Assesses dynamic range anxiety risk score and level for a proposed trip distance.
+        Charging is capped at 100% and distance at 200 km.
         """
+        current_soc = min(100.0, max(0.0, current_soc))
+        trip_distance_km = min(200.0, max(0.0, trip_distance_km))
+
         if current_soc <= 0:
             estimated_range_km = 0.0
         else:
@@ -76,22 +80,35 @@ class BatteryPredictiveModel:
 
         headroom_km = estimated_range_km - trip_distance_km
 
-        if headroom_km < 15:
-            risk = "High"
-            recommendation = "Route charging stop strongly recommended before or along trip."
-            color = "#EF4444"
-        elif headroom_km < 35:
+        if trip_distance_km <= 0:
+            risk_score = 0
+        elif current_soc <= 0 or estimated_range_km <= 0:
+            risk_score = 100
+        else:
+            ratio = trip_distance_km / max(0.1, estimated_range_km)
+            if ratio <= 1.0:
+                raw_score = 80.0 * (ratio ** 1.3)
+            else:
+                raw_score = 80.0 + 20.0 * (1.0 - math.exp(-2.2 * (ratio - 1.0)))
+            risk_score = int(round(min(100.0, max(0.0, raw_score))))
+
+        if risk_score < 40:
+            risk = "Low"
+            recommendation = "Safe to travel without intermediate charging stops."
+            color = "#10B981"
+        elif risk_score < 75:
             risk = "Moderate"
             recommendation = "Drive in Eco mode. Reserve a fast-charger along route as precaution."
             color = "#F59E0B"
         else:
-            risk = "Low"
-            recommendation = "Safe to travel without intermediate charging stops."
-            color = "#10B981"
+            risk = "High"
+            recommendation = "Route charging stop strongly recommended before or along trip."
+            color = "#EF4444"
 
         margin_percent = max(0.0, round((headroom_km / max(1.0, trip_distance_km)) * 100, 1))
 
         return {
+            "risk_score": risk_score,
             "risk_level": risk,
             "risk_color": color,
             "current_soc_percent": current_soc,

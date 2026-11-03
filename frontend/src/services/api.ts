@@ -1,6 +1,6 @@
 import { ChargingStation, TelemetryData, Vehicle, Booking } from '../types';
 import { INITIAL_STATIONS, INITIAL_TELEMETRY, INITIAL_VEHICLES, INITIAL_BOOKINGS } from '../data/mockData';
-import { calculateEstimatedRange } from '../utils/rangeCalculator';
+import { calculateEstimatedRange, calculateDynamicRangeAnxiety } from '../utils/rangeCalculator';
 
 const BASE_URL = 'http://localhost:8000/api';
 
@@ -203,17 +203,27 @@ export const evoraApi = {
       // Fallback
     }
 
-    const remaining = payload.predicted_range_km - payload.trip_distance_km;
-    const margin = Math.round((remaining / Math.max(1, payload.trip_distance_km)) * 100);
+    const anxiety = calculateDynamicRangeAnxiety(
+      payload.current_battery,
+      payload.trip_distance_km,
+      payload.predicted_range_km,
+      {
+        mode: payload.driving_style,
+        weatherCondition: payload.weather,
+        vehicleLoad: payload.vehicle_load,
+        traffic: payload.traffic
+      }
+    );
+
     return {
-      risk_score: 62,
-      risk_level: 'Medium',
-      trip_feasibility: 'Feasible (Caution advised on ghats/highway)',
-      remaining_range_km: Math.max(0, remaining),
-      safety_margin_percent: margin,
-      charging_recommended: true,
-      recommended_station_hint: 'Zeon Charging - Urse Food Mall (150 kW DC Fast)',
-      data_label: 'Route Headroom Model'
+      risk_score: anxiety.riskScore,
+      risk_level: anxiety.riskLevel,
+      trip_feasibility: anxiety.tripFeasibility,
+      remaining_range_km: anxiety.remainingRangeKm,
+      safety_margin_percent: anxiety.safetyMarginPercent,
+      charging_recommended: anxiety.chargingRecommended,
+      recommended_station_hint: anxiety.recommendedStationHint,
+      data_label: 'Dynamic Route Headroom Model'
     };
   },
 

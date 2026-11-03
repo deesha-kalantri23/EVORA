@@ -10,6 +10,7 @@ Coordinates between:
 
 import os
 import json
+import math
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 from app.database.database import (
@@ -405,39 +406,68 @@ class TelemetryService:
     @staticmethod
     def predict_anxiety_dynamic(req_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Assesses range anxiety dynamically and logs to prediction_history.
+        Assesses range anxiety dynamically based on charging (max 100) and trip distance (max 200 km)
+        and logs inference to prediction_history.
         """
+        # Charging max 100%
         current_battery = float(req_dict.get("current_battery", 78.0))
-        pred_range = float(req_dict.get("predicted_range_km", (current_battery / 100.0) * 100.0))
+        current_battery = min(100.0, max(0.0, current_battery))
+
+        # Distance max 200 km
         trip_dist = float(req_dict.get("trip_distance_km", 148.0))
+        trip_dist = min(200.0, max(0.0, trip_dist))
+
+        pred_range = float(req_dict.get("predicted_range_km", (current_battery / 100.0) * 100.0))
+        pred_range = min(100.0, max(0.0, pred_range))
+
         remaining = pred_range - trip_dist
         margin_percent = round((remaining / max(1.0, trip_dist)) * 100, 1)
 
-        if margin_percent > 60:
-            risk_score = 25
-            risk_level = "Low"
-            feasibility = "Easily Feasible (Direct transit)"
-            charging_recommended = False
-        elif margin_percent >= 25:
-            risk_score = 62
-            risk_level = "Medium"
-            feasibility = "Feasible (Caution advised on ghats/highway)"
-            charging_recommended = True
+        # Dynamic continuous risk score calculation (0 to 100 scale)
+        if trip_dist <= 0:
+            risk_score = 0
+        elif current_battery <= 0 or pred_range <= 0:
+            risk_score = 100
         else:
-            risk_score = 88
+            ratio = trip_dist / max(0.1, pred_range)
+            if ratio <= 1.0:
+                raw_score = 80.0 * (ratio ** 1.3)
+            else:
+                raw_score = 80.0 + 20.0 * (1.0 - math.exp(-2.2 * (ratio - 1.0)))
+            risk_score = int(round(min(100.0, max(0.0, raw_score))))
+
+        if risk_score < 40:
+            risk_level = "Low"
+            feasibility = "Easily Feasible (Direct transit with safe buffer)"
+            charging_recommended = False
+            summary = f"Safe buffer of {round(max(0.0, remaining), 1)} km to destination. Direct transit comfortable."
+        elif risk_score < 75:
+            risk_level = "Medium"
+            feasibility = "Feasible with Caution (Moderate buffer upon arrival)"
+            charging_recommended = (remaining < 20 or risk_score >= 60)
+            summary = f"Moderate buffer of {round(max(0.0, remaining), 1)} km. Eco driving advised."
+        else:
             risk_level = "High"
-            feasibility = "Infeasible without intermediate charging"
             charging_recommended = True
+            if remaining < 0:
+                feasibility = f"Charging Required ({trip_dist:.0f} km exceeds ~{pred_range:.0f} km single-charge range)"
+                summary = f"Distance exceeds single-charge range by {abs(round(remaining, 1))} km. Fast-charging stop required."
+            else:
+                feasibility = "Borderline Feasible (Critical < 10 km reserve margin)"
+                summary = f"Critical reserve margin of {round(remaining, 1)} km upon arrival. Pre-charging strongly recommended."
 
         output = {
             "risk_score": risk_score,
             "risk_level": risk_level,
             "trip_feasibility": feasibility,
-            "remaining_range_km": round(max(0.0, remaining), 1),
+            "trip_distance_km": trip_dist,
+            "current_battery": current_battery,
+            "remaining_range_km": round(remaining, 1),
             "safety_margin_percent": margin_percent,
             "charging_recommended": charging_recommended,
             "recommended_station_hint": "Zeon Charging - Urse Food Mall (150 kW DC Fast)",
-            "data_label": "AI Range Anxiety Risk Model"
+            "summary_text": summary,
+            "data_label": "Dynamic Range Anxiety Risk Model"
         }
 
         model = load_model()

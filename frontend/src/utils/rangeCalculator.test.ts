@@ -3,6 +3,7 @@ import {
   calculateCombinedEfficiencyMultiplier,
   calculateEstimatedRange,
   calculateBatteryPercentForDistance,
+  calculateDynamicRangeAnxiety,
   DEFAULT_VEHICLE_RANGE_CONFIG
 } from './rangeCalculator.ts';
 
@@ -132,6 +133,63 @@ export function runRangeCalculatorTests() {
     test: 'Case 12: Battery consumption calculation consistent (50 km = 50% battery)',
     passed: p12,
     details: `50 km required battery: ${distPercent.batteryPercentNeeded}%`
+  });
+
+  // Case 13: Range anxiety score is dynamic and scales continuously with distance
+  const a_dist30 = calculateDynamicRangeAnxiety(80, 30);
+  const a_dist60 = calculateDynamicRangeAnxiety(80, 60);
+  const a_dist120 = calculateDynamicRangeAnxiety(80, 120);
+  const a_dist180 = calculateDynamicRangeAnxiety(80, 180);
+  const p13 = a_dist30.riskScore < a_dist60.riskScore &&
+              a_dist60.riskScore < a_dist120.riskScore &&
+              a_dist120.riskScore < a_dist180.riskScore;
+  results.push({
+    test: 'Case 13: Range anxiety score scales dynamically with distance for fixed charge',
+    passed: p13,
+    details: `30km: ${a_dist30.riskScore}, 60km: ${a_dist60.riskScore}, 120km: ${a_dist120.riskScore}, 180km: ${a_dist180.riskScore}`
+  });
+
+  // Case 14: Range anxiety score decreases dynamically with higher charging for fixed distance
+  const a_soc20 = calculateDynamicRangeAnxiety(20, 80);
+  const a_soc50 = calculateDynamicRangeAnxiety(50, 80);
+  const a_soc80 = calculateDynamicRangeAnxiety(80, 80);
+  const a_soc100 = calculateDynamicRangeAnxiety(100, 80);
+  const p14 = a_soc20.riskScore > a_soc50.riskScore &&
+              a_soc50.riskScore > a_soc80.riskScore &&
+              a_soc80.riskScore > a_soc100.riskScore;
+  results.push({
+    test: 'Case 14: Range anxiety score decreases dynamically with higher charging for fixed distance',
+    passed: p14,
+    details: `20% SoC: ${a_soc20.riskScore}, 50% SoC: ${a_soc50.riskScore}, 80% SoC: ${a_soc80.riskScore}, 100% SoC: ${a_soc100.riskScore}`
+  });
+
+  // Case 15: Maximum constraints enforced (charging max 100%, distance max 200 km) and boundaries
+  const a_maxBounds = calculateDynamicRangeAnxiety(150, 350); // should clamp to 100% and 200km
+  const a_zeroDist = calculateDynamicRangeAnxiety(80, 0);
+  const a_zeroCharge = calculateDynamicRangeAnxiety(0, 50);
+  const p15 = a_maxBounds.riskScore >= 95 &&
+              a_maxBounds.riskScore <= 100 &&
+              a_zeroDist.riskScore === 0 &&
+              a_zeroDist.riskLevel === 'Low' &&
+              a_zeroCharge.riskScore === 100 &&
+              a_zeroCharge.riskLevel === 'High';
+  results.push({
+    test: 'Case 15: Clamping to charging max 100% and distance max 200km with valid boundaries',
+    passed: p15,
+    details: `Capped (150% SoC, 350km): score ${a_maxBounds.riskScore}; 0 km: ${a_zeroDist.riskScore}; 0% SoC: ${a_zeroCharge.riskScore}`
+  });
+
+  // Case 16: Risk level categorization reflects actual operational risk
+  const a_low = calculateDynamicRangeAnxiety(100, 30); // 30 km on 100% charge = safe
+  const a_med = calculateDynamicRangeAnxiety(75, 55);  // 55 km on 75% charge = moderate buffer
+  const a_high = calculateDynamicRangeAnxiety(75, 148); // 148 km on 75% charge = deficit/charging required
+  const p16 = a_low.riskLevel === 'Low' && !a_low.chargingRecommended &&
+              a_med.riskLevel === 'Medium' &&
+              a_high.riskLevel === 'High' && a_high.chargingRecommended;
+  results.push({
+    test: 'Case 16: Risk levels accurately reflect Low (<40), Medium (40-74), High (>=75)',
+    passed: p16,
+    details: `Low: ${a_low.riskScore} (${a_low.riskLevel}), Med: ${a_med.riskScore} (${a_med.riskLevel}), High: ${a_high.riskScore} (${a_high.riskLevel})`
   });
 
   return results;

@@ -12,6 +12,7 @@ export interface AdminBooking {
   member_phone?: string;
   vehicle_registration_number: string;
   vehicle_model: string;
+  vehicle_type?: string;
   station_id: string;
   station_name: string;
   station_location: string;
@@ -77,6 +78,8 @@ export interface ActiveChargingSession {
   member_name: string;
   member_email?: string;
   vehicle_registration_number: string;
+  vehicle_model?: string;
+  vehicle_type?: string;
   session_start_time: string;
   session_end_estimated?: string;
   energy_delivered_kwh: number;

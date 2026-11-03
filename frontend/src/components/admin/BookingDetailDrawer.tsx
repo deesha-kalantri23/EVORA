@@ -9,6 +9,7 @@ import {
   Mail,
   Phone,
   Car,
+  Bike,
   CreditCard,
   ShieldCheck,
   RotateCcw,
@@ -134,10 +135,32 @@ export const BookingDetailDrawer: React.FC<BookingDetailDrawerProps> = ({
                 <p className="text-slate-300 mt-0.5">{booking.member_phone || '+91 98230 45678'}</p>
               </div>
               <div className="col-span-2">
-                <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                  <Car className="w-3 h-3" /> Vehicle Model
-                </p>
-                <p className="text-slate-300 mt-0.5 font-medium">{booking.vehicle_model}</p>
+                {(() => {
+                  const is2W = (booking.vehicle_model || '').toLowerCase().includes('scooty') ||
+                    (booking.vehicle_model || '').toLowerCase().includes('2w') ||
+                    (booking.connector_type || '').toLowerCase().includes('ather') ||
+                    (booking.connector_type || '').toLowerCase().includes('lev');
+                  return (
+                    <div>
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                        {is2W ? <Bike className="w-3.5 h-3.5 text-purple-400" /> : <Car className="w-3.5 h-3.5 text-cyan-400" />}
+                        <span>Vehicle Model & Category</span>
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-slate-200 font-medium">{booking.vehicle_model}</p>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            is2W
+                              ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                              : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                          }`}
+                        >
+                          {is2W ? '2W Scooty (Max ₹70)' : '4W Car (Max ₹450)'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

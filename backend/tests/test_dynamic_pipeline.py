@@ -192,5 +192,69 @@ class TestDynamicPipeline(unittest.TestCase):
         self.assertIn("recent_predictions", data)
         self.assertIn("data_source_statuses", data)
 
+    def test_14_range_anxiety_dynamic_scoring(self):
+        """14. Range anxiety dynamic calculation according to charging and distance (max 100% SoC, max 200km)"""
+        # Low risk: 100% charging, 30 km distance
+        resp_low = self.client.post("/api/telemetry/predict-anxiety", json={
+            "current_battery": 100.0,
+            "trip_distance_km": 30.0,
+            "predicted_range_km": 100.0
+        })
+        self.assertEqual(resp_low.status_code, 200)
+        low_data = resp_low.json()
+        self.assertEqual(low_data["risk_level"], "Low")
+        self.assertLess(low_data["risk_score"], 40)
+        self.assertFalse(low_data["charging_recommended"])
+
+        # Medium risk: 78% charging, 60 km distance
+        resp_med = self.client.post("/api/telemetry/predict-anxiety", json={
+            "current_battery": 78.0,
+            "trip_distance_km": 60.0,
+            "predicted_range_km": 78.0
+        })
+        self.assertEqual(resp_med.status_code, 200)
+        med_data = resp_med.json()
+        self.assertEqual(med_data["risk_level"], "Medium")
+        self.assertTrue(40 <= med_data["risk_score"] < 75)
+
+        # High risk: 78% charging, 148 km distance
+        resp_high = self.client.post("/api/telemetry/predict-anxiety", json={
+            "current_battery": 78.0,
+            "trip_distance_km": 148.0,
+            "predicted_range_km": 78.0
+        })
+        self.assertEqual(resp_high.status_code, 200)
+        high_data = resp_high.json()
+        self.assertEqual(high_data["risk_level"], "High")
+        self.assertGreaterEqual(high_data["risk_score"], 75)
+        self.assertTrue(high_data["charging_recommended"])
+
+        # Dynamic increase with distance: for 78% SoC, 40km < 80km < 140km
+        resp_40 = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 78, "trip_distance_km": 40, "predicted_range_km": 78}).json()
+        resp_80 = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 78, "trip_distance_km": 80, "predicted_range_km": 78}).json()
+        resp_140 = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 78, "trip_distance_km": 140, "predicted_range_km": 78}).json()
+        self.assertLess(resp_40["risk_score"], resp_80["risk_score"])
+        self.assertLess(resp_80["risk_score"], resp_140["risk_score"])
+
+        # Dynamic decrease with charging: for 80 km trip, 30% SoC > 60% SoC > 100% SoC risk
+        resp_c30 = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 30, "trip_distance_km": 80, "predicted_range_km": 30}).json()
+        resp_c60 = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 60, "trip_distance_km": 80, "predicted_range_km": 60}).json()
+        resp_c100 = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 100, "trip_distance_km": 80, "predicted_range_km": 100}).json()
+        self.assertGreater(resp_c30["risk_score"], resp_c60["risk_score"])
+        self.assertGreater(resp_c60["risk_score"], resp_c100["risk_score"])
+
+        # Max bounds: 200 km maximum distance
+        resp_max = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 100, "trip_distance_km": 200, "predicted_range_km": 100}).json()
+        self.assertGreaterEqual(resp_max["risk_score"], 90)
+        self.assertEqual(resp_max["trip_distance_km"], 200.0)
+
+        # Edge cases: 0 km distance -> 0 risk
+        resp_zero_dist = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 50, "trip_distance_km": 0, "predicted_range_km": 50}).json()
+        self.assertEqual(resp_zero_dist["risk_score"], 0)
+
+        # 0 battery -> 100 risk
+        resp_zero_bat = self.client.post("/api/telemetry/predict-anxiety", json={"current_battery": 0, "trip_distance_km": 50, "predicted_range_km": 0}).json()
+        self.assertEqual(resp_zero_bat["risk_score"], 100)
+
 if __name__ == "__main__":
     unittest.main()

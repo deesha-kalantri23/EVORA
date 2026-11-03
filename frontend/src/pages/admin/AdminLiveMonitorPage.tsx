@@ -10,7 +10,8 @@ import {
   CheckCircle2,
   ShieldCheck,
   Building2,
-  Car
+  Car,
+  Bike
 } from 'lucide-react';
 import { adminDataService } from '../../services/adminDataService';
 import { ActiveChargingSession, AdminStation } from '../../types/admin';
@@ -150,11 +151,33 @@ export const AdminLiveMonitorPage: React.FC = () => {
                   {/* Member & Vehicle */}
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-bold text-white">{session.member_name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-bold text-white">{session.member_name}</h3>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 ${
+                            session.vehicle_type === '2W Scooty' || (session.vehicle_model || '').includes('Scooty')
+                              ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                              : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                          }`}
+                        >
+                          {session.vehicle_type === '2W Scooty' || (session.vehicle_model || '').includes('Scooty') ? (
+                            <Bike className="w-2.5 h-2.5" />
+                          ) : (
+                            <Car className="w-2.5 h-2.5" />
+                          )}
+                          <span>{session.vehicle_type || '4W Car'}</span>
+                        </span>
+                      </div>
                       <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
                         <span className="font-mono text-emerald-400 font-bold">
                           {session.vehicle_registration_number}
                         </span>
+                        {session.vehicle_model && (
+                          <>
+                            <span>•</span>
+                            <span className="text-slate-300">{session.vehicle_model}</span>
+                          </>
+                        )}
                       </div>
                     </div>
 

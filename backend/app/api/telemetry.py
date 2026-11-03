@@ -31,8 +31,8 @@ class RangePredictionRequest(BaseModel):
     elevation: str = Field("Flat Terrain", description="Elevation profile")
 
 class RangeAnxietyRequest(BaseModel):
-    current_battery: float = Field(78.0, ge=0.0, le=100.0)
-    trip_distance_km: float = Field(148.0, gt=0.0)
+    current_battery: float = Field(78.0, ge=0.0, le=100.0, description="Current battery SoC (max 100)")
+    trip_distance_km: float = Field(148.0, ge=0.0, le=200.0, description="Proposed trip distance in km (max 200 km)")
     predicted_range_km: float = Field(78.0, ge=0.0)
     weather: Optional[str] = "Sunny / Clear (32°C)"
     traffic: Optional[str] = "Moderate"

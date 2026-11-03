@@ -16,12 +16,12 @@ import {
 } from 'lucide-react';
 import { Badge } from '../components/Badge';
 import { evoraApi } from '../services/api';
-import { calculateEstimatedRange } from '../utils/rangeCalculator';
+import { calculateEstimatedRange, calculateDynamicRangeAnxiety } from '../utils/rangeCalculator';
 
 export const RangeAnxietyPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Inputs
+  // Inputs (Charging max 100%, Distance max 200 km)
   const [currentBattery, setCurrentBattery] = useState(78);
   const [tripDistance, setTripDistance] = useState(148); // Pune to Mumbai default
   const [predictedRange, setPredictedRange] = useState(78);
@@ -32,14 +32,15 @@ export const RangeAnxietyPage: React.FC = () => {
 
   // Calculation Results
   const [loading, setLoading] = useState(false);
-  const [riskScore, setRiskScore] = useState(75);
+  const [riskScore, setRiskScore] = useState(93);
   const [riskLevel, setRiskLevel] = useState<'Low' | 'Medium' | 'High'>('High');
   const [tripFeasibility, setTripFeasibility] = useState('Charging Required (148 km exceeds ~78 km single-charge range)');
   const [remainingRange, setRemainingRange] = useState(-70);
   const [safetyMargin, setSafetyMargin] = useState(-47.3);
   const [chargingRecommended, setChargingRecommended] = useState(true);
+  const [summaryText, setSummaryText] = useState('Distance exceeds single-charge range by 70 km. Fast-charging stop required.');
 
-  // Sync predictedRange whenever currentBattery or conditions change
+  // Dynamically recalculate estimated range and range anxiety score whenever inputs change
   React.useEffect(() => {
     const mode = drivingStyle.includes('Eco') ? 'Eco' : drivingStyle.includes('Fast') || drivingStyle.includes('Sport') ? 'Sport' : 'Normal';
     const dynamicResult = calculateEstimatedRange(currentBattery, {
@@ -47,17 +48,49 @@ export const RangeAnxietyPage: React.FC = () => {
       weatherCondition: weather,
       vehicleLoad
     });
-    setPredictedRange(dynamicResult.estimatedRangeKm);
-  }, [currentBattery, drivingStyle, weather, vehicleLoad]);
+    const estRange = dynamicResult.estimatedRangeKm;
+    setPredictedRange(estRange);
+
+    const anxiety = calculateDynamicRangeAnxiety(currentBattery, tripDistance, estRange, {
+      mode,
+      weatherCondition: weather,
+      vehicleLoad,
+      traffic
+    });
+
+    setRiskScore(anxiety.riskScore);
+    setRiskLevel(anxiety.riskLevel);
+    setTripFeasibility(anxiety.tripFeasibility);
+    setRemainingRange(anxiety.remainingRangeKm);
+    setSafetyMargin(anxiety.safetyMarginPercent);
+    setChargingRecommended(anxiety.chargingRecommended);
+    setSummaryText(anxiety.summaryText);
+  }, [currentBattery, tripDistance, drivingStyle, weather, vehicleLoad, traffic]);
 
   React.useEffect(() => {
     evoraApi.getTelemetry().then(tel => {
-      if (tel) {
-        if (tel.soc_percentage) setCurrentBattery(tel.soc_percentage);
-        if (tel.estimated_range_km) setPredictedRange(tel.estimated_range_km);
+      if (tel && typeof tel.soc_percentage === 'number') {
+        setCurrentBattery(Math.min(100, Math.max(0, Math.round(tel.soc_percentage))));
       }
     }).catch(console.error);
   }, []);
+
+  const handlePredictedRangeChange = (val: number) => {
+    const clamped = Math.min(100, Math.max(0, val));
+    setPredictedRange(clamped);
+    const anxiety = calculateDynamicRangeAnxiety(currentBattery, tripDistance, clamped, {
+      weatherCondition: weather,
+      vehicleLoad,
+      traffic
+    });
+    setRiskScore(anxiety.riskScore);
+    setRiskLevel(anxiety.riskLevel);
+    setTripFeasibility(anxiety.tripFeasibility);
+    setRemainingRange(anxiety.remainingRangeKm);
+    setSafetyMargin(anxiety.safetyMarginPercent);
+    setChargingRecommended(anxiety.chargingRecommended);
+    setSummaryText(anxiety.summaryText);
+  };
 
   const handlePredictAnxiety = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,18 +108,18 @@ export const RangeAnxietyPage: React.FC = () => {
       });
 
       if (res) {
-        setRiskScore(typeof res.risk_score === 'number' ? res.risk_score : 62);
+        setRiskScore(typeof res.risk_score === 'number' ? res.risk_score : 0);
         const lvl = (res.risk_level === 'Low' || res.risk_level === 'Medium' || res.risk_level === 'High') ? res.risk_level : 'Medium';
         setRiskLevel(lvl);
         setTripFeasibility(res.trip_feasibility || 'Feasible');
-        setRemainingRange(typeof res.remaining_range_km === 'number' ? res.remaining_range_km : 136);
-        setSafetyMargin(typeof res.safety_margin_percent === 'number' ? res.safety_margin_percent : 91.8);
+        setRemainingRange(typeof res.remaining_range_km === 'number' ? res.remaining_range_km : 0);
+        setSafetyMargin(typeof res.safety_margin_percent === 'number' ? res.safety_margin_percent : 0);
         setChargingRecommended(Boolean(res.charging_recommended));
       }
     } catch (err) {
       console.error('Error predicting anxiety:', err);
     } finally {
-      setTimeout(() => setLoading(false), 400);
+      setTimeout(() => setLoading(false), 300);
     }
   };
 
@@ -140,25 +173,29 @@ export const RangeAnxietyPage: React.FC = () => {
           </div>
 
           <form onSubmit={handlePredictAnxiety} className="space-y-4 text-xs">
-            {/* 1. Current Battery */}
+            {/* 1. Current Battery / Charging Level */}
             <div className="space-y-1.5">
               <div className="flex justify-between">
                 <label className="text-slate-300 font-semibold flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-emerald-400" /> Current Battery
+                  <Zap className="w-3.5 h-3.5 text-emerald-400" /> Current Charging Level (SoC)
                 </label>
                 <span className="font-extrabold text-white text-sm">{currentBattery}%</span>
               </div>
               <input
                 type="range"
-                min="10"
+                min="0"
                 max="100"
                 value={currentBattery}
-                onChange={(e) => setCurrentBattery(parseInt(e.target.value))}
+                onChange={(e) => setCurrentBattery(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
                 className="w-full accent-emerald-500 cursor-pointer"
               />
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>0% (Empty)</span>
+                <span>Max 100%</span>
+              </div>
             </div>
 
-            {/* 2. Trip Distance */}
+            {/* 2. Trip Distance (Max 200 km) */}
             <div className="space-y-1.5">
               <div className="flex justify-between">
                 <label className="text-slate-300 font-semibold flex items-center gap-1.5">
@@ -168,12 +205,16 @@ export const RangeAnxietyPage: React.FC = () => {
               </div>
               <input
                 type="range"
-                min="20"
-                max="350"
+                min="0"
+                max="200"
                 value={tripDistance}
-                onChange={(e) => setTripDistance(parseInt(e.target.value))}
+                onChange={(e) => setTripDistance(Math.min(200, Math.max(0, parseInt(e.target.value) || 0)))}
                 className="w-full accent-rose-500 cursor-pointer"
               />
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>0 km</span>
+                <span>Max 200 km</span>
+              </div>
             </div>
 
             {/* 3. Predicted Range */}
@@ -189,9 +230,13 @@ export const RangeAnxietyPage: React.FC = () => {
                 min="0"
                 max="100"
                 value={predictedRange}
-                onChange={(e) => setPredictedRange(parseInt(e.target.value))}
+                onChange={(e) => handlePredictedRangeChange(parseInt(e.target.value) || 0)}
                 className="w-full accent-blue-500 cursor-pointer"
               />
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>0 km</span>
+                <span>Max 100 km</span>
+              </div>
             </div>
 
             {/* 4. Weather */}
@@ -262,7 +307,7 @@ export const RangeAnxietyPage: React.FC = () => {
               ) : (
                 <>
                   <AlertTriangle className="w-4 h-4" />
-                  <span>Predict Range Anxiety</span>
+                  <span>Predict Range Anxiety (Sync ML)</span>
                 </>
               )}
             </button>
@@ -285,14 +330,14 @@ export const RangeAnxietyPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
               <div>
                 <span className="text-slate-400 text-xs font-semibold block uppercase">
-                  Risk Score
+                  Dynamic Risk Score
                 </span>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="text-5xl font-black text-white">{riskScore}</span>
                   <span className="text-2xl font-bold text-slate-400">/ 100</span>
                 </div>
-                <span className="text-xs text-slate-400 mt-1 block">
-                  Moderate safety buffer over the Khandala Ghats
+                <span className="text-xs text-slate-400 mt-1 block leading-relaxed">
+                  {summaryText}
                 </span>
               </div>
 
@@ -347,7 +392,7 @@ export const RangeAnxietyPage: React.FC = () => {
                 </span>
               </div>
               <span className="text-[10px] text-slate-400 mt-2 block">
-                Buffer upon arrival
+                {remainingRange >= 0 ? 'Buffer upon arrival' : 'Range deficit upon arrival'}
               </span>
             </div>
 
@@ -357,12 +402,12 @@ export const RangeAnxietyPage: React.FC = () => {
                 Safety Margin
               </span>
               <div className="mt-2">
-                <span className="text-3xl font-black text-amber-400 block">
-                  +{safetyMargin}%
+                <span className={`text-3xl font-black block ${safetyMargin >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {safetyMargin >= 0 ? `+${safetyMargin}%` : `${safetyMargin}%`}
                 </span>
               </div>
               <span className="text-[10px] text-slate-400 mt-2 block">
-                Relative headroom
+                {safetyMargin >= 0 ? 'Relative headroom' : 'Deficit relative to distance'}
               </span>
             </div>
           </div>

@@ -19,7 +19,9 @@ import {
   AlertCircle,
   Calendar,
   Building2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Bike,
+  Car
 } from 'lucide-react';
 import { adminDataService } from '../../services/adminDataService';
 import { AdminBooking, BookingStatus, PaymentStatus, AdminStation } from '../../types/admin';
@@ -45,6 +47,7 @@ export const AdminBookingsPage: React.FC = () => {
   const [dateFilter, setDateFilter] = useState<string>(globalDateRange);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
+  const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -90,6 +93,7 @@ export const AdminBookingsPage: React.FC = () => {
         dateRange: dateFilter,
         status: statusFilter,
         paymentStatus: paymentFilter,
+        vehicleType: vehicleTypeFilter,
         sortBy,
         sortOrder,
         page,
@@ -104,7 +108,7 @@ export const AdminBookingsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [search, stationFilter, dateFilter, statusFilter, paymentFilter, sortBy, sortOrder, page, pageSize]);
+  }, [search, stationFilter, dateFilter, statusFilter, paymentFilter, vehicleTypeFilter, sortBy, sortOrder, page, pageSize]);
 
   useEffect(() => {
     fetchBookings();
@@ -309,7 +313,7 @@ export const AdminBookingsPage: React.FC = () => {
       </div>
 
       {/* Secondary Filter Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-2xl bg-[#111827] border border-[#1E293B] text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3.5 rounded-2xl bg-[#111827] border border-[#1E293B] text-xs">
         {/* Station Filter */}
         <div>
           <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
@@ -329,6 +333,25 @@ export const AdminBookingsPage: React.FC = () => {
                 {st.name} ({st.city})
               </option>
             ))}
+          </select>
+        </div>
+
+        {/* Vehicle Category Filter */}
+        <div>
+          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Vehicle Type
+          </label>
+          <select
+            value={vehicleTypeFilter}
+            onChange={(e) => {
+              setVehicleTypeFilter(e.target.value);
+              setPage(1);
+            }}
+            className="w-full bg-[#0B0F17] text-slate-200 text-xs rounded-lg px-2.5 py-1.5 border border-[#1E293B] focus:outline-none focus:border-emerald-500 cursor-pointer"
+          >
+            <option value="all">All Vehicle Types</option>
+            <option value="2w">2W Scooty (Max ₹70)</option>
+            <option value="4w">4W Car (Max ₹450)</option>
           </select>
         </div>
 
@@ -478,12 +501,34 @@ export const AdminBookingsPage: React.FC = () => {
 
                     {/* Member & Vehicle */}
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-white">{b.member_name}</div>
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">
-                        <span className="font-mono text-emerald-400">{b.vehicle_registration_number}</span>
-                        <span>•</span>
-                        <span className="truncate max-w-[120px]">{b.vehicle_model}</span>
-                      </div>
+                      {(() => {
+                        const is2W = (b.vehicle_model || '').toLowerCase().includes('scooty') ||
+                          (b.vehicle_model || '').toLowerCase().includes('2w') ||
+                          (b.connector_type || '').toLowerCase().includes('ather') ||
+                          (b.connector_type || '').toLowerCase().includes('lev');
+                        return (
+                          <>
+                            <div className="font-semibold text-white flex items-center gap-2">
+                              <span>{b.member_name}</span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border inline-flex items-center gap-1 ${
+                                  is2W
+                                    ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                                    : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+                                }`}
+                              >
+                                {is2W ? <Bike className="w-2.5 h-2.5" /> : <Car className="w-2.5 h-2.5" />}
+                                <span>{is2W ? '2W Scooty' : '4W Car'}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">
+                              <span className="font-mono text-emerald-400">{b.vehicle_registration_number}</span>
+                              <span>•</span>
+                              <span className="truncate max-w-[130px]">{b.vehicle_model}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </td>
 
                     {/* Station & City */}
